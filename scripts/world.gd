@@ -5,6 +5,7 @@ extends Node3D
 ## One tile is one metre. Tile (x, y) covers world X in [x, x+1] and Z in [y, y+1].
 
 const Toon := preload("res://scripts/toon.gd")
+const Village := preload("res://scripts/village.gd")
 const GROUND_SHADER := preload("res://shaders/ground.gdshader")
 const GRASS_SHADER := preload("res://shaders/grass.gdshader")
 const FLOWER_SHADER := preload("res://shaders/flower.gdshader")
@@ -17,38 +18,49 @@ const STREAK_SHADER := preload("res://shaders/wind_streak.gdshader")
 
 ## .  meadow        g  tall grass    p  path      f  flower patch    w  water
 ## T  maple (red)   B  ginkgo (gold) R  rock      S  start, on the path
+## b  bush          c  tree stump    x  log fence (joins fence tiles beside it)
 ## Edit freely: every row must be the same length. Water gets a sandy beach
 ## BEACH_WIDTH tiles wide on the tiles around it, so keep tall grass ("g") at
 ## least one tile away from water or it will be hidden under the sand.
+##
+## The village, east of the tree line (columns 40 and up):
+## 1  windmill (7x4)   2  seal workshop (6x4)   3  rest house (6x4)
+## 4  cottage (5x4)    A number marks a building's north-west corner; fill the
+##                     rest of its footprint with "o".
+## s  signpost         q  well          d  paper-drying rack
+## Buildings have no see-through window like the trees do, so keep the two rows
+## behind (north of) each one blocked: nobody should walk where they can't be
+## seen. Trees are big: one within four tiles south of anything hides it, which
+## is why the trees along the south edge are kept low (SOUTH_EDGE_TREES).
 const LAYOUT: Array[String] = [
-	"TTBTTTTBTTTTTBTTTTTppTTTTBTTTTTBTTTTBTTT",
-	"TBT..TTT...TTTB.T..pp..TT...TTBT...TTTBT",
-	"TT.....ff.........ppp........gggg.....TT",
-	"BT...gggg.........pp..........gggggg..TB",
-	"TT..gggggg...R....pp...f.....ggggg....TT",
-	"T...ggggggg......ppp..........ggg...R..T",
-	"TT...ggggg......ppp....T.........f.....T",
-	"T.....ggg......ppp......wwwwww........TT",
-	"TB............ppp.....wwwwwwwwww.......B",
-	"T.....B......ppp.....wwwwwwwwwwww.ff...T",
-	"TT..........ppp......wwwwwwRwwwww......T",
-	"T....f.....ppp.......wwwwwwwwwww..gg..TT",
-	"T.........pppp........wwwwwwwww..gggg..T",
-	"TT.......ppppppppppp....wwwww...ggggg..B",
-	"T...R....ppp....pppppp..........gggg..TT",
-	"T........pp........pppppppppppp..gg....T",
-	"TT..ggg..pp....f.........R...pppp......T",
-	"B..ggggg.ppp...................ppppppppp",
-	"T.gggggggppp...R........f.............TT",
-	"TT.ggggg.pp.............B.............TB",
-	"T...ggg..pp.....ff...............R.....T",
-	"TB.......ppp................gggg.......T",
-	"T....f...Spp...............gggggg.....TT",
-	"TT.......ppp...T............gggg..f...BT",
-	"T..R.....pp..................gg........T",
-	"TB.......pp....ff................T....TT",
-	"TTT..B...pp..TT...BTT....TT....BT...TTBT",
-	"TTBTTTTBTppTTTTBTTTTTBTTTTBTTTTTBTTTTBTT",
+	"TTBTTTTBTTTTTBTTTTTppTTTTBTTTTTBTTTTBTTTTTBTTTTBTTTTTBTTTTBTTTTBTTTTBTTTTT",
+	"TBT..TTT...TTTB.T..pp..TT...TTBT...TTTBTT.T.B.T.T.T.B.T.T.T.T.B.T.T.T.B.TT",
+	"TT.....ff.........ppp........gggg.....TTTT.T.T.B.T.T.T.T.B.T.T.T.T.B.T.TTT",
+	"BT...gggg.........pp..........gggggg..TBT.B.T.T.T.B.T.T.T.T.B.T.T.T.T.B.TT",
+	"TT..gggggg...R....pp...f.....ggggg....TTTT.T.T.T.T.T.B.T.T.T.T.T.B.T.T.TTT",
+	"T...ggggggg......ppp.b........ggg...R..TT.T.B.T.T.T.T.T.B.T.T.T.T.B.T.T.TT",
+	"TT...ggggg...bb.ppp....T.........f.....TTTTTTBTTTTTTTTBTTTTTTTBTTTTTTTBTTT",
+	"T.....ggg......ppp......wwwwww.....c..TTTBTTTTTTBTTTTTTTTTBTTTTTTTTBTTTTTT",
+	"TB........b...ppp.....wwwwwwwwww.......BTTbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbTT",
+	"T..c..B......ppp.....wwwwwwwwwwww.ff...TTb4oooo..2ooooo..1oooooo..3ooooobT",
+	"TT..........ppp......wwwwwwRwwwww......TTbooooo..oooooo..ooooooo..oooooobT",
+	"T....f.....ppp.......wwwwwwwwwww..gg..TTTbooooo..oooooo..ooooooo..oooooobT",
+	"T.........pppp........wwwwwwwww..gggg..TTbooooobdoooooobbooooooobboooooobT",
+	"TT...bb..ppppppppppp....wwwww...ggggg..BT..ppp.....pp.......p........p...T",
+	"T...R....ppp....pppppp..........gggg..TTT..ppppppppppppppppppppppppppp...T",
+	"T........pp........pppppppppppp..gg....TT..............ppppppppppp.bbbbb.T",
+	"TT..ggg..pp....f.........R...pppp...bb.TT.......s......ppppppppppp.bbbbb.T",
+	"B..ggggg.ppp..........c........pppppppppppppppppppppppppppppqppppp.4oooobT",
+	"T.gggggggppp...R........f.....b.......TTT..............ppppppppppp.ooooobT",
+	"TT.ggggg.pp..xxxxxx.....B.............TBT..............ppppppppppp.ooooobT",
+	"T...ggg..pp..xffffx..............R.....TT.....xxxx.xxxx............ooooobT",
+	"TB....bb.ppp.xffffx.........gggg.......TT.....xffx.xffx.......c..........T",
+	"T.b..f...Spp...........bb..gggggg.....TTT.....xffx.xffx..................T",
+	"TT.......ppp................gggg..f...BTTB...............b.............B.T",
+	"T..R..c..pp.........c........gg........TTTTTBTTTTTTTTTTBTTTTTTBTTTTTTTBTTT",
+	"TB.......pp....ff................T....TTT.T.T.B.T.T.T.T.T.T.B.T.T.T.T.B.TT",
+	"TTT..B...pp..TT...BTT....TT....BT...TTBTTT.B.T.T.T.B.T.T.T.T.T.B.T.T.T.TTT",
+	"TTBTTTTBTppTTTTBTTTTTBTTTTBTTTTTBTTTTBTTTTBTTTTBTTTTTTBTTTTTTBTTTTTTTBTTTT",
 ]
 const WALKABLE := ".gpfS"
 
@@ -57,6 +69,13 @@ const TREE_MARGIN := 7      ## tiles of decorative forest beyond the playable ma
 const SHORT_PER_TILE := 56
 const TALL_PER_TILE := 80
 const TRUNK_HEIGHT := 1.4
+const TREE_SCALE := 2.0     ## how big trees stand next to the wanderer
+const TREE_FLUFF := 0.36    ## how lumpy their crowns are, in metres
+## The camera looks north, so a tall tree hides whatever stands behind it.
+## Trees in the last SOUTH_EDGE_ROWS rows of the map, and in the forest beyond
+## them, are shrunk by this much so they never cover the playfield.
+const SOUTH_EDGE_TREES := 0.55
+const SOUTH_EDGE_ROWS := 4
 const LEAF_COUNT := 160
 const STREAK_COUNT := 24
 const SHORE_RES := 8        ## shore-field pixels per tile
@@ -103,6 +122,10 @@ func _ready() -> void:
 	_build_flowers()
 	_build_trees()
 	_build_rocks()
+	_build_bushes()
+	_build_stumps()
+	_build_fences()
+	_build_village()
 	_build_air()
 
 
@@ -135,8 +158,9 @@ func _tile_clamped(cell: Vector2i) -> String:
 	return tile_at(Vector2i(clampi(cell.x, 0, width - 1), clampi(cell.y, 0, height - 1)))
 
 
+## Bare earth: paths, and the ground under buildings and the well.
 func _is_path(tile: String) -> bool:
-	return tile == "p" or tile == "S"
+	return tile in "pS1234oq"
 
 
 func _build_masks() -> void:
@@ -306,8 +330,8 @@ func _build_grass() -> void:
 				continue
 			var tall := tile == "g"
 			var count := TALL_PER_TILE if tall else SHORT_PER_TILE
-			if tile == "T" or tile == "B":
-				count = SHORT_PER_TILE / 2  # thinner under the trees
+			if tile == "T" or tile == "B" or tile == "b":
+				count = SHORT_PER_TILE / 2  # thinner under trees and bushes
 			for i in count:
 				var x := cx + _rng.randf()
 				var z := cy + _rng.randf()
@@ -401,16 +425,18 @@ func _build_trees() -> void:
 			var size := 1.0
 			if tile == "T" or tile == "B":
 				kind = tile
-				size = _rng.randf_range(0.8, 1.0)
+				size = _rng.randf_range(0.8, 1.0) * TREE_SCALE
 			elif tile == "#":
 				# Decorative forest beyond the map. Leave the path exits open.
 				if _mask(_path_mask, cx + 0.5, cy + 0.5) > 0.2:
 					continue
 				if _rng.randf() < 0.3:
 					kind = "B" if _rng.randf() < 0.25 else "T"
-					size = _rng.randf_range(0.9, 1.25)
+					size = _rng.randf_range(0.9, 1.25) * TREE_SCALE
 			if kind == "":
 				continue
+			if cy >= height - SOUTH_EDGE_ROWS:
+				size *= SOUTH_EDGE_TREES
 			var pos := Vector3(
 					cx + 0.5 + _rng.randf_range(-0.18, 0.18), 0.0,
 					cy + 0.5 + _rng.randf_range(-0.18, 0.18))
@@ -419,21 +445,18 @@ func _build_trees() -> void:
 			else:
 				_add_tree(pos, size, ginkgo_x, ginkgo_c, trunk_x, trunk_c)
 
-	var blob := SphereMesh.new()
-	blob.radius = 1.0
-	blob.height = 2.0
-	blob.radial_segments = 20
-	blob.rings = 10
+	var blob := _blob_mesh()
 	# Each tree material draws a second, inside-out pass: its pencil outline.
-	var maple := _shader_material(CANOPY_SHADER)
-	maple.next_pass = _shader_material(CANOPY_OUTLINE_SHADER)
+	var maple := _shader_material(CANOPY_SHADER, {"fluff": TREE_FLUFF})
+	maple.next_pass = _shader_material(CANOPY_OUTLINE_SHADER, {"fluff": TREE_FLUFF})
 	_add_multimesh("MapleCanopies", blob, maple_x, maple_c, maple, true)
 	var ginkgo := _shader_material(CANOPY_SHADER, {
 		"color_light": Color(1.0, 0.87, 0.4),
 		"color_mid": Color(0.95, 0.7, 0.22),
 		"color_dark": Color(0.78, 0.52, 0.18),
+		"fluff": TREE_FLUFF,
 	})
-	ginkgo.next_pass = _shader_material(CANOPY_OUTLINE_SHADER)
+	ginkgo.next_pass = _shader_material(CANOPY_OUTLINE_SHADER, {"fluff": TREE_FLUFF})
 	_add_multimesh("GinkgoCanopies", blob, ginkgo_x, ginkgo_c, ginkgo, true)
 
 	var trunk := CylinderMesh.new()
@@ -496,6 +519,221 @@ func _build_rocks() -> void:
 					Vector3(0.38, 0.3, 0.42))
 
 
+# --- Bushes, stumps and fences --------------------------------------------------
+
+## Bushes are foliage like the tree crowns (same shader, so they rustle in the
+## same wind): a low dome with a ring of smaller clumps, some carrying berries.
+func _build_bushes() -> void:
+	var leaf_x: Array[Transform3D] = []
+	var leaf_c: Array[Color] = []
+	var berry_x: Array[Transform3D] = []
+	var berry_c: Array[Color] = []
+	for cy in height:
+		for cx in width:
+			if tile_at(Vector2i(cx, cy)) != "b":
+				continue
+			var base := Vector3(cx + 0.5 + _rng.randf_range(-0.08, 0.08), 0.0,
+					cy + 0.5 + _rng.randf_range(-0.08, 0.08))
+			var tint := _rng.randf()
+			var has_berries := _rng.randf() < 0.4
+			var clumps := _rng.randi_range(4, 5)
+			var start := _rng.randf() * TAU
+			for i in clumps + 1:
+				var centre := base + Vector3(0.0, 0.28, 0.0)
+				var radius := _rng.randf_range(0.38, 0.44)
+				if i > 0:
+					var angle := start + TAU * i / clumps + _rng.randf_range(-0.3, 0.3)
+					centre = base + Vector3(
+							cos(angle) * 0.24, _rng.randf_range(0.15, 0.24), sin(angle) * 0.24)
+					radius = _rng.randf_range(0.22, 0.3)
+				_add_blob(leaf_x, leaf_c, centre, radius, tint)
+				if not has_berries:
+					continue
+				for j in 3:
+					# Somewhere on the upper half of the clump.
+					var turn := _rng.randf() * TAU
+					var tilt := _rng.randf_range(0.2, 1.1)
+					var out := Vector3(cos(turn) * sin(tilt), cos(tilt) * 0.82, sin(turn) * sin(tilt))
+					var size := _rng.randf_range(0.05, 0.065)
+					berry_x.append(Transform3D(
+							Basis.IDENTITY.scaled(Vector3(size, size, size)),
+							centre + out * (radius + 0.05)))
+					berry_c.append(Color(_rng.randf(), _rng.randf(), 0.0, 0.0))
+
+	# Low foliage never hides the wanderer, so it needs no see-through window.
+	# In a battle the camera leans in low, so a bush in its way fades out.
+	var leaves := _shader_material(CANOPY_SHADER, {
+		"color_light": Color(0.52, 0.78, 0.4),
+		"color_mid": Color(0.32, 0.64, 0.36),
+		"color_dark": Color(0.2, 0.48, 0.33),
+		"fluff": 0.1,
+		"patch_scale": 2.4,
+		"see_through": false,
+		"fades_in_battle": true,
+	})
+	leaves.next_pass = _shader_material(CANOPY_OUTLINE_SHADER, {
+		"fluff": 0.1,
+		"see_through": false,
+		"fades_in_battle": true,
+		"width": 0.03,
+	})
+	_add_multimesh("Bushes", _blob_mesh(), leaf_x, leaf_c, leaves, true)
+
+	var berries := _shader_material(CANOPY_SHADER, {
+		"color_light": Color(1.0, 0.5, 0.42),
+		"color_mid": Color(0.92, 0.28, 0.3),
+		"color_dark": Color(0.72, 0.16, 0.26),
+		"fluff": 0.0,
+		"see_through": false,
+		"fades_in_battle": true,
+	})
+	berries.next_pass = _shader_material(CANOPY_OUTLINE_SHADER, {
+		"fluff": 0.0,
+		"see_through": false,
+		"fades_in_battle": true,
+		"width": 0.012,
+	})
+	_add_multimesh("Berries", _blob_mesh(8, 4), berry_x, berry_c, berries, false)
+
+
+## Tree stumps: a flared trunk with growth rings on the cut, roots gripping the
+## ground, and sometimes mushrooms at the foot or a shoot growing from the top.
+func _build_stumps() -> void:
+	var bark := Toon.material(Color(0.62, 0.44, 0.31), true, 0.025)
+	var wood := Toon.material(Color(0.94, 0.82, 0.6), false)
+	var ring := Toon.material(Color(0.8, 0.64, 0.44), false)
+	var cap := Toon.material(Color(0.94, 0.47, 0.33), true, 0.014)
+	var stalk := Toon.material(Color(0.97, 0.93, 0.83), true, 0.012)
+	var shoot := Toon.material(Color(0.45, 0.72, 0.34), true, 0.012)
+
+	var trunk := _cylinder_mesh(0.27, 0.36, 0.36, 14)
+	var disc := _cylinder_mesh(1.0, 1.0, 1.0, 20)  # scaled into each ring
+	var root := _ball_mesh(0.15, 0.16)
+	var mushroom_stalk := _cylinder_mesh(0.03, 0.04, 0.1, 8)
+	var mushroom_cap := _ball_mesh(0.09, 0.11)
+	var shoot_stem := _cylinder_mesh(0.012, 0.016, 0.16, 6)
+	var leaf := _ball_mesh(0.07, 0.035)
+
+	var stumps := Node3D.new()
+	stumps.name = "Stumps"
+	add_child(stumps)
+	for cy in height:
+		for cx in width:
+			if tile_at(Vector2i(cx, cy)) != "c":
+				continue
+			var stump := Node3D.new()
+			stump.position = Vector3(cx + 0.5 + _rng.randf_range(-0.1, 0.1), 0.0,
+					cy + 0.5 + _rng.randf_range(-0.1, 0.1))
+			stump.rotation.y = _rng.randf() * TAU
+			var size := _rng.randf_range(0.88, 1.1)
+			stump.scale = Vector3(size, size, size)
+			stumps.add_child(stump)
+
+			Toon.part(stump, trunk, bark, Vector3(0.0, 0.18, 0.0))
+			# The cut: pale wood with two darker growth rings, a hair apart in
+			# height so they never flicker against each other.
+			Toon.part(stump, disc, wood, Vector3(0.0, 0.362, 0.0), Vector3.ZERO, Vector3(0.25, 0.01, 0.25))
+			Toon.part(stump, disc, ring, Vector3(0.0, 0.366, 0.0), Vector3.ZERO, Vector3(0.18, 0.01, 0.18))
+			Toon.part(stump, disc, wood, Vector3(0.0, 0.37, 0.0), Vector3.ZERO, Vector3(0.13, 0.01, 0.13))
+			Toon.part(stump, disc, ring, Vector3(0.0, 0.374, 0.0), Vector3.ZERO, Vector3(0.045, 0.01, 0.045))
+			for i in 3:
+				var angle := TAU * i / 3.0 + _rng.randf_range(-0.4, 0.4)
+				Toon.part(stump, root, bark, Vector3(cos(angle) * 0.33, 0.06, sin(angle) * 0.33),
+						Vector3(0.0, -rad_to_deg(angle), 0.0), Vector3(1.5, 1.0, 1.0))
+
+			var extra := _rng.randf()
+			if extra < 0.45:
+				for i in _rng.randi_range(1, 2):
+					var angle := _rng.randf() * TAU
+					var foot := Vector3(cos(angle) * 0.46, 0.0, sin(angle) * 0.46)
+					Toon.part(stump, mushroom_stalk, stalk, foot + Vector3(0.0, 0.05, 0.0))
+					Toon.part(stump, mushroom_cap, cap, foot + Vector3(0.0, 0.12, 0.0))
+			elif extra < 0.75:
+				var spot := Vector3(_rng.randf_range(-0.08, 0.08), 0.36, _rng.randf_range(-0.08, 0.08))
+				Toon.part(stump, shoot_stem, shoot, spot + Vector3(0.0, 0.08, 0.0))
+				Toon.part(stump, leaf, shoot, spot + Vector3(0.06, 0.17, 0.0),
+						Vector3(0.0, 0.0, 28.0), Vector3(1.4, 1.0, 0.8))
+				Toon.part(stump, leaf, shoot, spot + Vector3(-0.06, 0.15, 0.0),
+						Vector3(0.0, 0.0, -28.0), Vector3(1.4, 1.0, 0.8))
+
+
+## Log fences: a post on every fence tile, each a little crooked, and two rails
+## to the fence tile to its east and to its south.
+func _build_fences() -> void:
+	var post_wood := Toon.material(Color(0.66, 0.48, 0.32), true, 0.02)
+	var rail_wood := Toon.material(Color(0.8, 0.62, 0.42), true, 0.018)
+	var post := _cylinder_mesh(0.085, 0.105, 0.62, 10)
+	var point := _cylinder_mesh(0.02, 0.085, 0.1, 10)
+	var rail := _cylinder_mesh(0.045, 0.05, 1.1, 8)
+
+	var fences := Node3D.new()
+	fences.name = "Fences"
+	add_child(fences)
+	for cy in height:
+		for cx in width:
+			var cell := Vector2i(cx, cy)
+			if tile_at(cell) != "x":
+				continue
+			var centre := cell_to_world(cell)
+			var upright := Node3D.new()
+			upright.position = centre
+			upright.rotation_degrees = Vector3(
+					_rng.randf_range(-4.0, 4.0), _rng.randf() * 360.0, _rng.randf_range(-4.0, 4.0))
+			fences.add_child(upright)
+			Toon.part(upright, post, post_wood, Vector3(0.0, 0.31, 0.0))
+			Toon.part(upright, point, post_wood, Vector3(0.0, 0.67, 0.0))
+
+			for step: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN]:
+				if tile_at(cell + step) != "x":
+					continue
+				var middle := centre + Vector3(step.x, 0.0, step.y) * 0.5
+				for rail_height: float in [0.2, 0.44]:
+					# A cylinder stands along Y: lay it down along the fence,
+					# never quite level.
+					var lie := Vector3(0.0, _rng.randf_range(-2.0, 2.0), 90.0 + _rng.randf_range(-2.5, 2.5))
+					if step == Vector2i.DOWN:
+						lie = Vector3(90.0 + _rng.randf_range(-2.5, 2.5), 0.0, _rng.randf_range(-2.0, 2.0))
+					Toon.part(fences, rail, rail_wood,
+							middle + Vector3(0.0, rail_height + _rng.randf_range(-0.02, 0.02), 0.0), lie)
+
+
+# --- Village --------------------------------------------------------------------
+
+## Places the village's buildings and street furniture. A building's tile is its
+## north-west corner; the model is centred on the whole footprint.
+func _build_village() -> void:
+	var village := Node3D.new()
+	village.name = "Village"
+	add_child(village)
+	for cy in height:
+		for cx in width:
+			var model: Node3D = null
+			var footprint := Vector2i.ONE
+			match tile_at(Vector2i(cx, cy)):
+				"1":
+					model = Village.windmill()
+					footprint = Vector2i(7, 4)
+				"2":
+					model = Village.workshop()
+					footprint = Vector2i(6, 4)
+				"3":
+					model = Village.rest_house()
+					footprint = Vector2i(6, 4)
+				"4":
+					model = Village.cottage(_rng.randi_range(0, 5))
+					footprint = Vector2i(5, 4)
+				"s":
+					model = Village.signpost()
+				"q":
+					model = Village.well()
+				"d":
+					model = Village.drying_rack()
+			if model == null:
+				continue
+			model.position = Vector3(cx + footprint.x * 0.5, 0.0, cy + footprint.y * 0.5)
+			village.add_child(model)
+
+
 # --- Leaves and wind streaks ----------------------------------------------------
 
 func _build_air() -> void:
@@ -528,6 +766,35 @@ func _random_seeds(count: int) -> Array[Color]:
 
 
 # --- Helpers --------------------------------------------------------------------
+
+## A unit sphere for foliage clumps: each instance scales it to size.
+func _blob_mesh(segments := 20, rings := 10) -> SphereMesh:
+	var mesh := SphereMesh.new()
+	mesh.radius = 1.0
+	mesh.height = 2.0
+	mesh.radial_segments = segments
+	mesh.rings = rings
+	return mesh
+
+
+## A ball `radius` wide and `tall` high (flattened or stretched, not scaled, so
+## an outline on it keeps an even thickness).
+func _ball_mesh(radius: float, tall: float) -> SphereMesh:
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = tall
+	mesh.radial_segments = 10
+	mesh.rings = 5
+	return mesh
+
+
+func _cylinder_mesh(top: float, bottom: float, tall: float, segments: int) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = top
+	mesh.bottom_radius = bottom
+	mesh.height = tall
+	mesh.radial_segments = segments
+	return mesh
 
 func _shader_material(shader: Shader, params := {}) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()

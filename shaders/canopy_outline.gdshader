@@ -9,16 +9,24 @@ render_mode world_vertex_coords, unshaded, cull_front, shadows_disabled;
 uniform vec3 ink : source_color = vec3(0.2, 0.12, 0.09);
 /// Line thickness in metres.
 uniform float width : hint_range(0.0, 0.15) = 0.04;
-/// Must match the foliage material.
+/// These three must match the foliage material.
 uniform float fluff : hint_range(0.0, 0.6) = 0.22;
+uniform bool see_through = true;
+uniform bool fades_in_battle = false;
+
+varying float v_fade;
 
 void vertex() {
+	v_fade = fades_in_battle ? battle_fade(MODEL_MATRIX[3].xyz) : 0.0;
 	VERTEX = canopy_shape(VERTEX, NORMAL, MODEL_MATRIX[3].xyz, fluff) + NORMAL * width;
 }
 
 void fragment() {
-	float keep = player_porthole(VERTEX, VIEW_MATRIX, PROJECTION_MATRIX);
-	if (keep < hash21(FRAGCOORD.xy)) {
+	float dither = hash21(FRAGCOORD.xy);
+	if (v_fade > dither) {
+		discard;
+	}
+	if (see_through && player_porthole(VERTEX, VIEW_MATRIX, PROJECTION_MATRIX) < dither) {
 		discard;
 	}
 	ALBEDO = ink;

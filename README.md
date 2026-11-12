@@ -11,15 +11,19 @@ o modelli importati.
 
 ## Cosa c'è finora
 
-- Un prato esplorabile a caselle, con erba alta, sentieri, alberi e un lago
-  dall'acqua in movimento e dalla riva sabbiosa.
+- Un prato esplorabile a caselle, con erba alta, sentieri, alberi, cespugli,
+  ceppi, un giardino recintato e un lago dall'acqua in movimento e dalla riva
+  sabbiosa.
+- Un borgo di fabbricanti d'inchiostro oltre la fila d'alberi a est: mulino a
+  vento, bottega dei sigilli, locanda, case, pozzo e orti. Per ora si visita
+  soltanto: negli edifici non si entra.
 - Un compagno che ti segue e incontri casuali nell'erba alta.
 - Lotte a turni con cinque elementi che si battono ad anello
   (Brace → Radice → Pietra → Vento → Pioggia → Brace).
 - Cattura con i sigilli d'inchiostro e una squadra fino a quattro creature.
 - Salvataggio automatico.
 
-È un prototipo: una sola zona, cinque creature, nessuna storia ancora.
+È un prototipo: un prato e un borgo, cinque creature, nessuna storia ancora.
 
 ## Come si avvia
 

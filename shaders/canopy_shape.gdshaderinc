@@ -2,6 +2,19 @@
 // outline so the two always move together. Needs wind.gdshaderinc included
 // first, and render_mode world_vertex_coords.
 
+// 0..1: how far a low plant centred on `origin` should fade away because it
+// stands between the camera and a battle (close to the clearing, on its south
+// side). It follows the clearing as it opens and closes, so nothing pops.
+float battle_fade(vec3 origin) {
+	if (clearing_radius < 0.01) {
+		return 0.0;
+	}
+	vec2 from_fight = origin.xz - clearing_center.xz;
+	float close = 1.0 - smoothstep(3.0, 4.0, length(from_fight));
+	float in_front = smoothstep(-0.5, 0.5, from_fight.y);
+	return close * in_front * clamp(clearing_radius / 1.2, 0.0, 1.0);
+}
+
 // Where a crown vertex ends up: lumpy, leaning with the gusts, rustling.
 // `origin` is the centre of the blob; everything is in world space.
 vec3 canopy_shape(vec3 vertex, vec3 normal, vec3 origin, float fluff) {

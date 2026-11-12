@@ -7,13 +7,23 @@ extends Node3D
 
 @export var target_path: NodePath
 @export var world_path: NodePath
-@export var offset := Vector3(0.0, 11.0, 7.6)
+@export var offset := Vector3(0.0, 17.6, 12.2)
 @export var look_height := 0.5
+## The view is centred this many tiles north of the target. Tall things stand
+## up-screen from whoever is in front of them, so looking ahead keeps their tops
+## in the picture; the target sits about a third of the way up the screen.
+@export var look_ahead := 2.0
 @export var follow_speed := 7.0
 ## How quickly the camera moves between the exploring and battle framings.
 @export var zoom_speed := 3.5
 ## How close (in tiles) the view centre may get to the map's left/right and top/bottom edges.
-@export var edge_margin := Vector2(6.5, 3.0)
+@export var edge_margin := Vector2(10.5, 6.0)
+## The bottom edge gets a wider margin: the forest south of the map stands
+## between the camera and the playfield, and would fill half the screen.
+@export var south_margin := 8.5
+## ...but the view still follows a target that walks further south than this
+## many tiles below the view centre, so it never leaves the picture.
+@export var max_below_centre := 4.5
 
 var _target: Node3D
 var _world: Node3D
@@ -64,7 +74,9 @@ func _goal() -> Vector3:
 	if _focused:
 		return _focus_point
 	var goal := _target.global_position
+	goal.z -= look_ahead
 	if _world != null:
 		goal.x = clampf(goal.x, edge_margin.x, maxf(edge_margin.x, _world.width - edge_margin.x))
-		goal.z = clampf(goal.z, edge_margin.y, maxf(edge_margin.y, _world.height - edge_margin.y))
+		goal.z = clampf(goal.z, edge_margin.y, maxf(edge_margin.y, _world.height - south_margin))
+		goal.z = maxf(goal.z, _target.global_position.z - max_below_centre)
 	return goal
