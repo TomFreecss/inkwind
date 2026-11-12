@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/camera_rig.gd" id="5_camera"]
 [ext_resource type="Shader" path="res://shaders/painterly_post.gdshader" id="6_post"]
 [ext_resource type="Script" path="res://scripts/battle.gd" id="7_battle"]
+[ext_resource type="Script" path="res://scripts/day_cycle.gd" id="8_day"]
 
 [sub_resource type="Environment" id="Environment_meadow"]
 background_mode = 1
@@ -43,6 +44,12 @@ directional_shadow_max_distance = 42.0
 
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("2_world")
+
+[node name="DayCycle" type="Node" parent="."]
+script = ExtResource("8_day")
+sun_path = NodePath("../Sun")
+environment_path = NodePath("../WorldEnvironment")
+world_path = NodePath("../World")
 
 [node name="Player" type="Node3D" parent="."]
 script = ExtResource("3_player")

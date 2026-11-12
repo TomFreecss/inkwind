@@ -17,6 +17,10 @@ o modelli importati.
 - Un borgo di fabbricanti d'inchiostro oltre la fila d'alberi a est: mulino a
   vento, bottega dei sigilli, locanda, case, pozzo e orti. Per ora si visita
   soltanto: negli edifici non si entra.
+- Il ciclo del giorno: alba, giorno, tramonto e notte, con finestre e lanterne
+  che si accendono al buio. Un giorno intero dura dieci minuti.
+- Le quattro stagioni, tre giorni ciascuna: alberi in fiore in primavera, verde
+  pieno d'estate, foglie rosse e dorate in autunno, neve d'inverno.
 - Un compagno che ti segue e incontri casuali nell'erba alta.
 - Lotte a turni con cinque elementi che si battono ad anello
   (Brace → Radice → Pietra → Vento → Pioggia → Brace).

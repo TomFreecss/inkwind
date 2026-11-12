@@ -6,6 +6,7 @@ extends Node3D
 
 const Toon := preload("res://scripts/toon.gd")
 const Village := preload("res://scripts/village.gd")
+const Seasons := preload("res://scripts/seasons.gd")
 const GROUND_SHADER := preload("res://shaders/ground.gdshader")
 const GRASS_SHADER := preload("res://shaders/grass.gdshader")
 const FLOWER_SHADER := preload("res://shaders/flower.gdshader")
@@ -102,6 +103,8 @@ var _water_mask := PackedFloat32Array()
 var _shore_width := 0
 var _shore_height := 0
 var _shore := PackedFloat32Array()
+# The materials a season repaints, by the names seasons.gd uses for them.
+var _season_mats := {}
 
 
 func _init() -> void:
@@ -150,6 +153,22 @@ func is_tall_grass(cell: Vector2i) -> bool:
 ## World position of the centre of a tile.
 func cell_to_world(cell: Vector2i) -> Vector3:
 	return Vector3(cell.x + 0.5, 0.0, cell.y + 0.5)
+
+
+## Repaints the land for the time of year: season `from`, drifting `amount`
+## (0..1) of the way into season `to`. Indices are those of Seasons.NAMES.
+func apply_season(from: int, to: int, amount: float) -> void:
+	var look := Seasons.blend(from, to, amount)
+	for material: String in look:
+		var mat: ShaderMaterial = _season_mats.get(material)
+		if mat == null:
+			continue
+		var outline := mat.next_pass as ShaderMaterial
+		for parameter: String in look[material]:
+			mat.set_shader_parameter(parameter, look[material][parameter])
+			# A thing's pencil outline comes and goes with it.
+			if outline != null and parameter == "shown":
+				outline.set_shader_parameter(parameter, look[material][parameter])
 
 
 # --- Masks --------------------------------------------------------------------
@@ -314,6 +333,7 @@ func _build_ground() -> void:
 		"map_size": Vector2(width, height),
 		"beach_width": BEACH_WIDTH,
 	})
+	_season_mats["ground"] = ground.material_override
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ground)
 
@@ -347,8 +367,9 @@ func _build_grass() -> void:
 				xforms.append(Transform3D(basis, Vector3(x, 0.0, z)))
 				customs.append(Color(_rng.randf(), 1.0 if tall else 0.0, 0.0, 0.0))
 
+	_season_mats["grass"] = _shader_material(GRASS_SHADER)
 	var grass := _add_multimesh("Grass", _blade_mesh(), xforms, customs,
-			_shader_material(GRASS_SHADER), false)
+			_season_mats["grass"], false)
 	grass.custom_aabb = HUGE_AABB
 
 
@@ -405,7 +426,8 @@ func _build_flowers() -> void:
 	head.height = 0.14
 	head.radial_segments = 8
 	head.rings = 4
-	_add_multimesh("Flowers", head, xforms, customs, _shader_material(FLOWER_SHADER), false)
+	_season_mats["flowers"] = _shader_material(FLOWER_SHADER)
+	_add_multimesh("Flowers", head, xforms, customs, _season_mats["flowers"], false)
 
 
 # --- Trees and rocks ------------------------------------------------------------
@@ -458,6 +480,8 @@ func _build_trees() -> void:
 	})
 	ginkgo.next_pass = _shader_material(CANOPY_OUTLINE_SHADER, {"fluff": TREE_FLUFF})
 	_add_multimesh("GinkgoCanopies", blob, ginkgo_x, ginkgo_c, ginkgo, true)
+	_season_mats["maple"] = maple
+	_season_mats["ginkgo"] = ginkgo
 
 	var trunk := CylinderMesh.new()
 	trunk.top_radius = 0.13
@@ -594,6 +618,8 @@ func _build_bushes() -> void:
 		"width": 0.012,
 	})
 	_add_multimesh("Berries", _blob_mesh(8, 4), berry_x, berry_c, berries, false)
+	_season_mats["bush"] = leaves
+	_season_mats["berries"] = berries
 
 
 ## Tree stumps: a flared trunk with growth rings on the cut, roots gripping the
@@ -737,8 +763,9 @@ func _build_village() -> void:
 # --- Leaves and wind streaks ----------------------------------------------------
 
 func _build_air() -> void:
+	_season_mats["air"] = _shader_material(LEAF_SHADER)
 	var leaves := _add_multimesh("Leaves", QuadMesh.new(), _identities(LEAF_COUNT),
-			_random_seeds(LEAF_COUNT), _shader_material(LEAF_SHADER), false)
+			_random_seeds(LEAF_COUNT), _season_mats["air"], false)
 	leaves.custom_aabb = HUGE_AABB
 
 	var strip := QuadMesh.new()

@@ -9,6 +9,9 @@ global uniform vec3 player_position;
 // A battle tramples a clearing in the grass. Radius 0 = no clearing.
 global uniform vec3 clearing_center;
 global uniform float clearing_radius;
+// 1 in daylight, lower at night. Unlit things (leaves, cloth, wind streaks)
+// multiply their colour by it so they dim with everything else.
+global uniform float day_brightness;
 
 // How far a grass tip leans, in blade lengths, at full gust.
 const float GRASS_SWAY = 0.38;

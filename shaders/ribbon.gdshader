@@ -29,5 +29,5 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = albedo * (0.85 + 0.15 * UV.y);
+	ALBEDO = albedo * (0.85 + 0.15 * UV.y) * day_brightness;
 }

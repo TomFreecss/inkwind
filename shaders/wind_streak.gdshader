@@ -42,5 +42,5 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = color;
+	ALBEDO = color * day_brightness;
 }

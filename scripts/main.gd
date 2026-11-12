@@ -5,7 +5,9 @@ extends Node3D
 ##       [--no-post] [--start=5,21] [--encounter=1.0] [--auto=0.5] [--auto-pick=1]
 ##       [--partner-hp=1] [--seals=2] [--party=sassotto:3,bracino:2]
 ##       [--press=confirm@2.5,move_right@3] [--press-every=confirm:0.6:5]
-##       [--save=check]
+##       [--save=check] [--time=0.9] [--day-speed=20] [--day=4] [--season=inverno]
+## --time sets the time of day (0 midnight, 0.5 noon) and stops the clock there
+## unless --day-speed, which multiplies how fast time passes, is given too.
 ## A --screenshot run never touches the real save: it neither loads nor saves,
 ## unless --save=name is given, which uses user://name.json instead.
 ## --frames counts sixtieths of a second. --start places the wanderer on a tile,
@@ -29,7 +31,9 @@ var _saving_enabled := true
 var _steps_unsaved := 0
 var _toast: Label
 var _toast_tween: Tween
+var _clock_label: Label
 
+@onready var _clock: Node = $DayCycle
 @onready var _painterly: ColorRect = $PostProcess/Painterly
 @onready var _help: Label = $Hud/Help
 @onready var _world: Node3D = $World
@@ -60,6 +64,10 @@ func _ready() -> void:
 	_help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 18)
 
 	_build_toast()
+	_build_clock_label()
+	_clock.phase_changed.connect(_update_clock_label.unbind(1))
+	_clock.day_changed.connect(_update_clock_label.unbind(1))
+	_clock.season_changed.connect(_update_clock_label.unbind(1))
 
 	# The hint makes way for the battle interface.
 	_battle.battle_started.connect(_on_battle_started)
@@ -89,6 +97,20 @@ func _ready() -> void:
 		var behind := cell + Vector2i.DOWN
 		_companion.teleport(behind if _world.is_walkable(behind) else cell)
 		_camera_rig.snap()
+	if options.has("season"):
+		# primavera, estate, autunno or inverno; ".5" after it means half-way through.
+		var wanted: PackedStringArray = options["season"].split(".")
+		var index: int = ["primavera", "estate", "autunno", "inverno"].find(wanted[0])
+		_clock.season_override = maxi(index, 0) + (0.5 if wanted.size() > 1 else 0.0)
+		_clock.apply()
+		_update_clock_label()
+	if options.has("day"):
+		_clock.set_clock(int(options["day"]), _clock.time_of_day)
+	if options.has("time"):
+		_clock.speed = 0.0
+		_clock.set_clock(_clock.day, float(options["time"]))
+	if options.has("day-speed"):
+		_clock.speed = float(options["day-speed"])
 	if options.has("encounter"):
 		_battle.encounter_chance = float(options["encounter"])
 		_battle.safe_steps = 0
@@ -135,10 +157,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _on_battle_started() -> void:
 	_help.visible = false
+	_clock_label.visible = false
 
 
 func _on_battle_ended(result: String) -> void:
 	_help.visible = not _capturing
+	_clock_label.visible = true
 	_save(true)
 	if _capturing:
 		print("battle_ended=", result, " seals=", _battle.party.seals, " party=", _party_summary())
@@ -170,6 +194,7 @@ func _save(announce := false) -> void:
 		},
 		"companion": {"cell": [_companion.cell.x, _companion.cell.y]},
 		"party": _battle.party.to_data(),
+		"clock": {"day": _clock.day, "time": _clock.time_of_day},
 	}
 	if SaveGame.write(_save_path, state):
 		_steps_unsaved = 0
@@ -225,6 +250,10 @@ func _restore(state: Dictionary) -> bool:
 	_companion.teleport(buddy)
 	_battle.sync_companion()
 	_camera_rig.snap()
+
+	# Saves made before the clock existed simply start on a first morning.
+	var clock_data := _as_dictionary(state.get("clock"))
+	_clock.set_clock(int(clock_data.get("day", 1)), float(clock_data.get("time", _clock.START_TIME)))
 	return true
 
 
@@ -236,6 +265,7 @@ func _new_game() -> void:
 	_companion.teleport(home + Vector2i.DOWN if _world.is_walkable(home + Vector2i.DOWN) else home)
 	_battle.sync_companion()
 	_camera_rig.snap()
+	_clock.set_clock(1, _clock.START_TIME)
 
 
 func _as_dictionary(value: Variant) -> Dictionary:
@@ -262,6 +292,22 @@ func _build_toast() -> void:
 	$Hud.add_child(_toast)
 	_toast.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 20)
 	_toast.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+
+
+## The day and the time of day, in the top-left corner.
+func _build_clock_label() -> void:
+	_clock_label = Label.new()
+	_clock_label.add_theme_font_size_override(&"font_size", 20)
+	_clock_label.add_theme_color_override(&"font_color", Color(0.2, 0.15, 0.13))
+	_clock_label.add_theme_color_override(&"font_outline_color", Color(0.97, 0.94, 0.88))
+	_clock_label.add_theme_constant_override(&"outline_size", 6)
+	$Hud.add_child(_clock_label)
+	_clock_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 20)
+	_update_clock_label()
+
+
+func _update_clock_label() -> void:
+	_clock_label.text = "%s · Giorno %d · %s" % [_clock.season(), _clock.day, _clock.phase()]
 
 
 ## A short note in the top-right corner that fades away by itself.
@@ -358,5 +404,7 @@ func _capture(options: Dictionary) -> void:
 		outcome = error_string(image.save_png(options["screenshot"]))
 	print("screenshot=", outcome, " cell=", _player.cell,
 			" in_battle=", _battle.in_battle, " fps=", Engine.get_frames_per_second(),
-			" seals=", _battle.party.seals, " party=", _party_summary())
+			" seals=", _battle.party.seals, " party=", _party_summary(),
+			" day=", _clock.day, " time=", snappedf(_clock.time_of_day, 0.001),
+			" season=", _clock.season())
 	get_tree().quit()

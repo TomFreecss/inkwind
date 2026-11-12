@@ -32,10 +32,27 @@ const WATER := Color(0.38, 0.68, 0.8)
 const BUILDING_SCALE := 2.0
 
 static var _materials := {}
+# What lights up after dark: the window and lantern materials, and the lamps
+# that spill warm light onto the ground. See set_night().
+static var _glow_materials: Array[StandardMaterial3D] = []
+static var _night_lights: Array[OmniLight3D] = []
 # Outline widths are multiplied by this. While a building is being made it is
 # 1 / BUILDING_SCALE, so that the lines end up no thicker than anyone else's
 # once the building is enlarged.
 static var _line_scale := 1.0
+
+
+## Lights the village for the time of day: 0 = daylight, 1 = deep night.
+## Windows and lanterns glow, and their lamps come on.
+static func set_night(amount: float) -> void:
+	for mat in _glow_materials:
+		mat.emission_enabled = amount > 0.01
+		mat.emission = GLOW
+		mat.emission_energy_multiplier = amount * 1.6
+	for lamp in _night_lights:
+		if is_instance_valid(lamp):
+			lamp.visible = amount > 0.01
+			lamp.light_energy = amount * 1.5
 
 
 # --- Buildings ------------------------------------------------------------------
@@ -67,6 +84,7 @@ static func windmill() -> Node3D:
 		sails.add_child(spoke)
 		Toon.part(spoke, arm, _mat(TIMBER, 0.02), Vector3(0.0, 0.78, 0.0))
 		Toon.part(spoke, cloth, _mat(PAPER, 0.02), Vector3(0.25, 0.92, 0.0))
+	_night_lamp(root, Vector3(0.0, 0.9, back + 1.35), 5.0)
 	return _finish_building(root)
 
 
@@ -87,6 +105,7 @@ static func workshop() -> Node3D:
 	for spot: Vector3 in [Vector3(-1.1, 0.0, 0.84), Vector3(-0.76, 0.0, 0.88)]:
 		Toon.part(root, _ball(0.16, 0.3), _mat(INK_BLACK, 0.02), spot + Vector3(0.0, 0.15, 0.0))
 		Toon.part(root, _cylinder(0.09, 0.1, 0.05, 12), _mat(PAPER, 0.015), spot + Vector3(0.0, 0.31, 0.0))
+	_night_lamp(root, Vector3(0.0, 0.8, 1.0), 5.5)
 	return _finish_building(root)
 
 
@@ -108,6 +127,7 @@ static func rest_house() -> Node3D:
 			Vector3(-0.72, 0.24, 0.87), Vector3(0.0, 0.0, 90.0))
 	for x: float in [-0.98, -0.46]:
 		Toon.part(root, _cylinder(0.06, 0.07, 0.2, 8), _mat(TIMBER, 0.015), Vector3(x, 0.1, 0.87))
+	_night_lamp(root, Vector3(1.15, 1.25, 1.05), 6.5)
 	return _finish_building(root)
 
 
@@ -126,6 +146,7 @@ static func cottage(variant: int) -> Node3D:
 	for i in 3:
 		Toon.part(root, bloom, _mat(colors[(variant + i) % colors.size()], 0.01),
 				Vector3(-0.38 * flip + (i - 1) * 0.13, 0.38, 0.67))
+	_night_lamp(root, Vector3(-0.38 * flip, 0.7, 0.95), 4.5)
 	return _finish_building(root)
 
 
@@ -241,7 +262,22 @@ static func _mat(color: Color, outline_width: float) -> StandardMaterial3D:
 	var key := "%s/%.4f" % [color.to_html(false), width]
 	if not _materials.has(key):
 		_materials[key] = Toon.material(color, width > 0.0, width)
+		if color == GLOW:
+			_glow_materials.append(_materials[key])
 	return _materials[key]
+
+
+## A warm lamp that is off by day; set_night() turns it up after dark.
+static func _night_lamp(root: Node3D, at: Vector3, reach: float) -> void:
+	var lamp := OmniLight3D.new()
+	lamp.position = at
+	lamp.light_color = Color(1.0, 0.78, 0.46)
+	lamp.omni_range = reach
+	lamp.omni_attenuation = 1.4
+	lamp.light_energy = 0.0
+	lamp.visible = false
+	root.add_child(lamp)
+	_night_lights.append(lamp)
 
 
 static func _cylinder(top: float, bottom: float, tall: float, segments: int) -> CylinderMesh:

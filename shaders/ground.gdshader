@@ -24,6 +24,9 @@ uniform vec3 water_shallow : source_color = vec3(0.62, 0.87, 0.84);
 uniform vec3 water_mid : source_color = vec3(0.3, 0.68, 0.8);
 uniform vec3 water_deep : source_color = vec3(0.17, 0.49, 0.72);
 uniform vec3 foam_color : source_color = vec3(0.96, 0.98, 0.97);
+uniform vec3 snow_color : source_color = vec3(0.96, 0.97, 1.0);
+/// How snowed-under the land is, 0..1. Winter sets it.
+uniform float snow : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 v_world;
 
@@ -114,9 +117,16 @@ void fragment() {
 	col *= 0.9 + fbm(wp * vec2(1.6, 5.0)) * 0.2;
 	col = mix(col, grass_dark * 0.75, mask.g * 0.6);
 
-	// Dirt path.
+	// Snow lies over the meadow in drifts, bluer in the hollows; a little of
+	// the land always shows through.
+	vec3 white = snow_color * (0.93 + fbm(wp * 0.9 + 21.0) * 0.07);
+	float cover = snow * smoothstep(0.25, 0.55, fbm(wp * 0.3 + 5.0) * 0.6 + snow * 0.6);
+	col = mix(col, white, cover);
+
+	// Dirt path, dusted with snow where people have not trodden it away.
 	vec3 dirt = mix(dirt_dark, dirt_light, fbm(wp * 0.6 + 7.0));
 	dirt *= 0.93 + fbm(wp * vec2(4.0, 1.2)) * 0.14;
+	dirt = mix(dirt, white, snow * 0.35 * fbm(wp * 1.7 + 3.0));
 	col = mix(col, dirt, smoothstep(0.4, 0.54, mask.r));
 
 	// Beach and lake. `inland` is the distance in from the ragged line where

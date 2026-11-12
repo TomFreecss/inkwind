@@ -18,6 +18,9 @@ uniform bool see_through = true;
 /// Fade away when standing between the camera and a battle. For low things:
 /// the battle camera leans in low, and even a bush can get in its way.
 uniform bool fades_in_battle = false;
+/// How much of this is there at all, 0..1. Lets a season take things away
+/// (berries off the bushes) and bring them back gradually.
+uniform float shown : hint_range(0.0, 1.0) = 1.0;
 
 varying vec3 v_world;
 varying vec3 v_normal;
@@ -25,7 +28,7 @@ varying float v_tint;
 varying float v_fade;
 
 void vertex() {
-	v_fade = fades_in_battle ? battle_fade(MODEL_MATRIX[3].xyz) : 0.0;
+	v_fade = max(1.0 - shown, fades_in_battle ? battle_fade(MODEL_MATRIX[3].xyz) : 0.0);
 	VERTEX = canopy_shape(VERTEX, NORMAL, MODEL_MATRIX[3].xyz, fluff);
 	v_world = VERTEX;
 	v_normal = NORMAL;

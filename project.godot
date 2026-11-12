@@ -51,3 +51,7 @@ clearing_radius={
 "type": "float",
 "value": 0.0
 }
+day_brightness={
+"type": "float",
+"value": 1.0
+}
