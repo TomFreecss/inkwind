@@ -1,5 +1,9 @@
 extends RefCounted
-## Shared look for solid props and characters: flat toon shading plus an inked outline.
+## Shared look for solid props and characters: flat toon shading plus a pencil outline.
+
+## The warm dark brown every outline is drawn in. The tree outline shaders use
+## the same colour as their default.
+const INK := Color(0.2, 0.12, 0.09)
 
 
 ## Toon-shaded material. With `outline`, a second pass draws the mesh again,
@@ -13,7 +17,7 @@ static func material(color: Color, outline := true, outline_width := 0.022) -> S
 	if outline:
 		var ink := StandardMaterial3D.new()
 		ink.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		ink.albedo_color = Color(0.13, 0.09, 0.12)
+		ink.albedo_color = INK
 		ink.cull_mode = BaseMaterial3D.CULL_FRONT
 		ink.grow = true
 		ink.grow_amount = outline_width

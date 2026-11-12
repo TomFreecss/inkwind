@@ -1,8 +1,9 @@
 # Inkwind
 
 *Titolo provvisorio.* Prototipo di un gioco di ruolo originale in cui si
-incontrano, si affrontano e si raccolgono creature, con una resa pittorica da
-libro illustrato: prati mossi dal vento, foglie che cadono, tratti a inchiostro.
+incontrano, si affrontano e si raccolgono creature, con una resa da libro
+illustrato ad acquerello: colori chiari, contorni a matita, prati mossi dal
+vento e foglie che cadono.
 
 Creature, nomi, mosse e mondo sono inventati per questo progetto. Tutta la
 grafica è costruita via codice da forme semplici e shader: non ci sono immagini
@@ -10,7 +11,8 @@ o modelli importati.
 
 ## Cosa c'è finora
 
-- Un prato esplorabile a caselle, con erba alta, sentieri, acqua e alberi.
+- Un prato esplorabile a caselle, con erba alta, sentieri, alberi e un lago
+  dall'acqua in movimento e dalla riva sabbiosa.
 - Un compagno che ti segue e incontri casuali nell'erba alta.
 - Lotte a turni con cinque elementi che si battono ad anello
   (Brace → Radice → Pietra → Vento → Pioggia → Brace).

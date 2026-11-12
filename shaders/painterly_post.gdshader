@@ -1,8 +1,11 @@
-// Full-screen "painted on paper" filter, applied to a ColorRect that covers the view.
-//  1. Kuwahara filter: flattens detail into brush dabs while keeping edges crisp.
-//  2. Wet edges: pigment pools darker where two colours meet.
-//  3. Pencil hatching in the deepest shadows.
-//  4. Paper grain, and a soft fade to bare paper in the corners.
+// Full-screen "watercolour and pencil on paper" filter, applied to a ColorRect
+// that covers the view.
+//  1. Kuwahara filter: flattens detail into even washes while keeping edges crisp.
+//  2. Wet edges: pigment pools a little darker where two washes meet.
+//  3. Pencil: the dark outlines drawn in the 3D scene are redrawn sharp on top
+//     of the washes, with a graphite grain.
+//  4. Uneven washes, hatching in the shade, paper grain, and a soft fade to
+//     bare paper in the corners.
 shader_type canvas_item;
 
 #include "res://shaders/noise.gdshaderinc"
@@ -10,23 +13,42 @@ shader_type canvas_item;
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear;
 
 group_uniforms brush;
-/// Brush size in taps. Cost grows with the square: 3 = 64 samples, 4 = 100.
-uniform int brush_radius : hint_range(1, 6) = 3;
+/// Brush size in taps. Cost grows with the square: 2 = 36 samples, 3 = 64.
+uniform int brush_radius : hint_range(1, 6) = 2;
 /// Distance between taps, in pixels at 900p.
-uniform float brush_spread : hint_range(0.5, 3.0) = 2.0;
+uniform float brush_spread : hint_range(0.5, 3.0) = 1.7;
 /// How much the hand "shakes": bends straight edges slightly.
 uniform float wobble : hint_range(0.0, 6.0) = 2.0;
 
 group_uniforms pigment;
-uniform float edge_darkening : hint_range(0.0, 1.5) = 0.3;
-uniform float saturation : hint_range(0.0, 2.0) = 1.12;
-uniform float hatch_strength : hint_range(0.0, 1.0) = 0.22;
+uniform float edge_darkening : hint_range(0.0, 1.5) = 0.22;
+uniform float saturation : hint_range(0.0, 2.0) = 1.15;
+uniform float hatch_strength : hint_range(0.0, 1.0) = 0.2;
+/// How uneven the washes are: slow drifts of lighter and darker pigment.
+uniform float wash_variation : hint_range(0.0, 0.5) = 0.12;
+
+group_uniforms pencil;
+uniform vec3 pencil_color : source_color = vec3(0.3, 0.19, 0.15);
+uniform float pencil_strength : hint_range(0.0, 1.0) = 0.85;
+/// How dark something in the scene must be to count as a pencil line.
+uniform float pencil_threshold : hint_range(0.0, 1.0) = 0.34;
 
 group_uniforms paper;
 uniform vec3 paper_color : source_color = vec3(0.965, 0.94, 0.875);
 uniform float paper_grain : hint_range(0.0, 1.0) = 0.4;
 uniform float border_fade : hint_range(0.0, 1.0) = 0.55;
 group_uniforms;
+
+// 0..1: how much a colour from the scene looks like an outline. Outlines are
+// the only thing drawn dark, dull and warm all at once; deep shade on green or
+// red foliage is dark but strongly coloured, so it is left alone.
+float pencil_mark(vec3 c) {
+	float luma = dot(c, vec3(0.299, 0.587, 0.114));
+	float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+	return (1.0 - smoothstep(pencil_threshold - 0.06, pencil_threshold + 0.06, luma))
+			* (1.0 - smoothstep(0.22, 0.34, chroma))
+			* smoothstep(-0.02, 0.03, c.r - c.g);
+}
 
 void fragment() {
 	vec2 px = SCREEN_PIXEL_SIZE;
@@ -111,13 +133,28 @@ void fragment() {
 	float edge = length(m0 - m3) + length(m1 - m2);
 	col *= 1.0 - edge_darkening * smoothstep(0.12, 0.7, edge);
 
+	// Washes are never perfectly even: pigment drifts as the paper dries.
+	col *= 1.0 + (fbm(ref_px * 0.006 + 3.0) - 0.5) * wash_variation;
+
 	float luma = dot(col, vec3(0.299, 0.587, 0.114));
 	col = mix(vec3(luma), col, saturation);
 
-	// 3. Diagonal pencil strokes, only where the picture is dark.
+	// Diagonal pencil strokes in the shade.
 	float stroke_coord = (ref_px.x + ref_px.y) * 0.22 + (value_noise(ref_px * 0.03) - 0.5) * 5.0;
 	float stroke = 1.0 - smoothstep(0.0, 0.2, abs(fract(stroke_coord) - 0.5));
-	col *= 1.0 - hatch_strength * stroke * (1.0 - smoothstep(0.15, 0.42, luma));
+	col *= 1.0 - hatch_strength * stroke * (1.0 - smoothstep(0.25, 0.5, luma));
+
+	// 3. Pencil. The filter above softens the scene's dark outlines, so find
+	//    them again in the untouched picture (this pixel and its neighbours)
+	//    and draw them back in, with gaps where the graphite skips the grain.
+	vec2 one = px * res_scale;
+	float line = pencil_mark(textureLod(screen_texture, uv, 0.0).rgb);
+	line = max(line, pencil_mark(textureLod(screen_texture, uv + vec2(one.x, 0.0), 0.0).rgb));
+	line = max(line, pencil_mark(textureLod(screen_texture, uv - vec2(one.x, 0.0), 0.0).rgb));
+	line = max(line, pencil_mark(textureLod(screen_texture, uv + vec2(0.0, one.y), 0.0).rgb));
+	line = max(line, pencil_mark(textureLod(screen_texture, uv - vec2(0.0, one.y), 0.0).rgb));
+	float graphite = 0.7 + 0.3 * value_noise(ref_px * 0.6);
+	col = mix(col, pencil_color, line * graphite * pencil_strength);
 
 	// 4. Paper: pigment settles into the grain, more visibly in darker washes.
 	float grain = fbm(ref_px * 0.11) * 0.7 + hash21(floor(ref_px * 0.5)) * 0.3;

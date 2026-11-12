@@ -5,7 +5,7 @@ render_mode diffuse_toon, specular_disabled;
 
 #include "res://shaders/wind.gdshaderinc"
 
-uniform vec3 albedo : source_color = vec3(0.27, 0.18, 0.15);
+uniform vec3 albedo : source_color = vec3(0.5, 0.34, 0.25);
 
 varying float v_rand;
 

@@ -86,7 +86,8 @@ func _ready() -> void:
 		var xy: PackedStringArray = options["start"].split(",")
 		var cell := Vector2i(int(xy[0]), int(xy[1]))
 		_player.teleport(cell)
-		_companion.teleport(cell + Vector2i.DOWN)
+		var behind := cell + Vector2i.DOWN
+		_companion.teleport(behind if _world.is_walkable(behind) else cell)
 		_camera_rig.snap()
 	if options.has("encounter"):
 		_battle.encounter_chance = float(options["encounter"])

@@ -9,13 +9,17 @@ const GROUND_SHADER := preload("res://shaders/ground.gdshader")
 const GRASS_SHADER := preload("res://shaders/grass.gdshader")
 const FLOWER_SHADER := preload("res://shaders/flower.gdshader")
 const CANOPY_SHADER := preload("res://shaders/canopy.gdshader")
+const CANOPY_OUTLINE_SHADER := preload("res://shaders/canopy_outline.gdshader")
 const TRUNK_SHADER := preload("res://shaders/trunk.gdshader")
+const TRUNK_OUTLINE_SHADER := preload("res://shaders/trunk_outline.gdshader")
 const LEAF_SHADER := preload("res://shaders/leaves.gdshader")
 const STREAK_SHADER := preload("res://shaders/wind_streak.gdshader")
 
 ## .  meadow        g  tall grass    p  path      f  flower patch    w  water
 ## T  maple (red)   B  ginkgo (gold) R  rock      S  start, on the path
-## Edit freely: every row must be the same length.
+## Edit freely: every row must be the same length. Water gets a sandy beach
+## BEACH_WIDTH tiles wide on the tiles around it, so keep tall grass ("g") at
+## least one tile away from water or it will be hidden under the sand.
 const LAYOUT: Array[String] = [
 	"TTBTTTTBTTTTTBTTTTTppTTTTBTTTTTBTTTTBTTT",
 	"TBT..TTT...TTTB.T..pp..TT...TTBT...TTTBT",
@@ -23,13 +27,13 @@ const LAYOUT: Array[String] = [
 	"BT...gggg.........pp..........gggggg..TB",
 	"TT..gggggg...R....pp...f.....ggggg....TT",
 	"T...ggggggg......ppp..........ggg...R..T",
-	"TT...ggggg......ppp....T...............T",
-	"T.....ggg......ppp..........f.........TT",
-	"TB............ppp.......wwwww..........B",
-	"T.....B......ppp.......wwwwwww....ff...T",
-	"TT..........ppp.......wwwwwwwww........T",
-	"T....f.....ppp........wwwwwwwww...gg..TT",
-	"T.........pppp.........wwwwwww...gggg..T",
+	"TT...ggggg......ppp....T.........f.....T",
+	"T.....ggg......ppp......wwwwww........TT",
+	"TB............ppp.....wwwwwwwwww.......B",
+	"T.....B......ppp.....wwwwwwwwwwww.ff...T",
+	"TT..........ppp......wwwwwwRwwwww......T",
+	"T....f.....ppp.......wwwwwwwwwww..gg..TT",
+	"T.........pppp........wwwwwwwww..gggg..T",
 	"TT.......ppppppppppp....wwwww...ggggg..B",
 	"T...R....ppp....pppppp..........gggg..TT",
 	"T........pp........pppppppppppp..gg....T",
@@ -55,6 +59,10 @@ const TALL_PER_TILE := 80
 const TRUNK_HEIGHT := 1.4
 const LEAF_COUNT := 160
 const STREAK_COUNT := 24
+const SHORE_RES := 8        ## shore-field pixels per tile
+const SHORE_REACH := 4.0    ## tiles: shore distances are capped here
+const BEACH_WIDTH := 0.8    ## tiles of sand between the waterline and the meadow
+const SHORE_WANDER := 0.35  ## how far the waterline strays from the tile edges
 const HUGE_AABB := AABB(Vector3(-500.0, -20.0, -500.0), Vector3(1000.0, 60.0, 1000.0))
 
 var width := 0
@@ -62,12 +70,19 @@ var height := 0
 var start_cell := Vector2i.ZERO
 
 var _rng := RandomNumberGenerator.new()
-# Path and water masks over the map plus a border, so grass placement can use
-# the same soft edges the ground shader paints.
+# Path and water masks over the map plus a border. Grass placement reads the
+# path one to match the soft edges the ground shader paints; the shoreline is
+# traced from the water one.
 var _mask_border := GRASS_MARGIN + 2
 var _mask_width := 0
 var _path_mask := PackedFloat32Array()
 var _water_mask := PackedFloat32Array()
+# Signed distance to the shoreline in tiles, SHORE_RES pixels per tile over the
+# map: positive in the water, negative on land. The ground shader paints sand,
+# foam and depth from it; grass and flowers use it to stay off the beach.
+var _shore_width := 0
+var _shore_height := 0
+var _shore := PackedFloat32Array()
 
 
 func _init() -> void:
@@ -82,6 +97,7 @@ func _init() -> void:
 func _ready() -> void:
 	_rng.seed = 7341
 	_build_masks()
+	_build_shore()
 	_build_ground()
 	_build_grass()
 	_build_flowers()
@@ -150,6 +166,104 @@ func _mask(mask: PackedFloat32Array, x: float, z: float) -> float:
 	return lerpf(top, bottom, tz)
 
 
+# --- Shore --------------------------------------------------------------------
+
+## Works out how far every spot is from the waterline. The outline comes from
+## the filtered water mask, so the lake is rounded rather than tile-square.
+func _build_shore() -> void:
+	_shore_width = width * SHORE_RES
+	_shore_height = height * SHORE_RES
+	var count := _shore_width * _shore_height
+	# Slow noise pulls the waterline back by up to SHORE_WANDER of a tile, so no
+	# stretch of shore is ruler-straight. It only ever retreats: the water never
+	# creeps onto the walkable tiles around it.
+	var wander := FastNoiseLite.new()
+	wander.seed = 11
+	wander.frequency = 0.3
+	wander.fractal_octaves = 2
+	# How far the water mask stands above the waterline level: positive = wet.
+	var over := PackedFloat32Array()
+	over.resize(count)
+	for y in _shore_height:
+		var z := (y + 0.5) / SHORE_RES
+		for x in _shore_width:
+			var px := (x + 0.5) / SHORE_RES
+			var level := 0.5 + SHORE_WANDER * (0.5 + 0.5 * wander.get_noise_2d(px, z))
+			over[y * _shore_width + x] = _mask(_water_mask, px, z) - level
+	var dist := _distance_to_zero(over)
+	_shore.resize(count)
+	for i in count:
+		var tiles := minf(dist[i] / SHORE_RES, SHORE_REACH)
+		_shore[i] = tiles if over[i] > 0.0 else -tiles
+
+
+## Distance in pixels from every shore-field pixel to the line where `field`
+## crosses zero. Pixels beside the line get a sub-pixel estimate from the
+## field's slope, so the result is smooth rather than stepped; a two-pass
+## chamfer sweep (a straight step costs 1, a diagonal one sqrt(2)) then carries
+## it outwards, accurate to a few percent.
+func _distance_to_zero(field: PackedFloat32Array) -> PackedFloat32Array:
+	const FAR := 1.0e6
+	const DIAGONAL := 1.41421
+	var w := _shore_width
+	var h := _shore_height
+	var dist := PackedFloat32Array()
+	dist.resize(w * h)
+	dist.fill(FAR)
+	for y in range(1, h - 1):
+		for x in range(1, w - 1):
+			var i := y * w + x
+			var wet := field[i] > 0.0
+			if (field[i - 1] > 0.0) == wet and (field[i + 1] > 0.0) == wet \
+					and (field[i - w] > 0.0) == wet and (field[i + w] > 0.0) == wet:
+				continue
+			var slope := 0.5 * Vector2(
+					field[i + 1] - field[i - 1], field[i + w] - field[i - w]).length()
+			dist[i] = minf(absf(field[i]) / maxf(slope, 0.0001), 1.0)
+	for y in h:
+		for x in w:
+			var i := y * w + x
+			var best := dist[i]
+			if x > 0:
+				best = minf(best, dist[i - 1] + 1.0)
+			if y > 0:
+				best = minf(best, dist[i - w] + 1.0)
+				if x > 0:
+					best = minf(best, dist[i - w - 1] + DIAGONAL)
+				if x < w - 1:
+					best = minf(best, dist[i - w + 1] + DIAGONAL)
+			dist[i] = best
+	for y in range(h - 1, -1, -1):
+		for x in range(w - 1, -1, -1):
+			var i := y * w + x
+			var best := dist[i]
+			if x < w - 1:
+				best = minf(best, dist[i + 1] + 1.0)
+			if y < h - 1:
+				best = minf(best, dist[i + w] + 1.0)
+				if x < w - 1:
+					best = minf(best, dist[i + w + 1] + DIAGONAL)
+				if x > 0:
+					best = minf(best, dist[i + w - 1] + DIAGONAL)
+			dist[i] = best
+	return dist
+
+
+## Signed distance to the waterline in tiles at a world position: positive in
+## the water, negative on land. Filtered the way the ground shader reads it.
+func _shore_at(x: float, z: float) -> float:
+	var fx := clampf(x * SHORE_RES - 0.5, 0.0, _shore_width - 1.001)
+	var fz := clampf(z * SHORE_RES - 0.5, 0.0, _shore_height - 1.001)
+	var x0 := int(fx)
+	var z0 := int(fz)
+	var tx := fx - x0
+	var tz := fz - z0
+	var i := z0 * _shore_width + x0
+	var top := lerpf(_shore[i], _shore[i + 1], tx)
+	var bottom := lerpf(_shore[i + _shore_width], _shore[i + _shore_width + 1], tx)
+	return lerpf(top, bottom, tz)
+
+
 # --- Ground -------------------------------------------------------------------
 
 func _build_ground() -> void:
@@ -160,7 +274,9 @@ func _build_ground() -> void:
 			image.set_pixel(x, y, Color(
 					1.0 if _is_path(tile) else 0.0,
 					1.0 if tile == "g" else 0.0,
-					1.0 if tile == "w" else 0.0))
+					0.0))
+	var shore_image := Image.create_from_data(_shore_width, _shore_height, false,
+			Image.FORMAT_RF, _shore.to_byte_array())
 
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(320.0, 320.0)
@@ -170,7 +286,9 @@ func _build_ground() -> void:
 	ground.position = Vector3(width * 0.5, 0.0, height * 0.5)
 	ground.material_override = _shader_material(GROUND_SHADER, {
 		"tile_mask": ImageTexture.create_from_image(image),
+		"shore_field": ImageTexture.create_from_image(shore_image),
 		"map_size": Vector2(width, height),
+		"beach_width": BEACH_WIDTH,
 	})
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ground)
@@ -193,7 +311,10 @@ func _build_grass() -> void:
 			for i in count:
 				var x := cx + _rng.randf()
 				var z := cy + _rng.randf()
-				if _mask(_path_mask, x, z) > 0.42 or _mask(_water_mask, x, z) > 0.2:
+				if _mask(_path_mask, x, z) > 0.42:
+					continue
+				# Keep the beach bare, with a ragged edge where the meadow starts.
+				if _shore_at(x, z) > -BEACH_WIDTH + _rng.randf_range(-0.15, 0.2):
 					continue
 				var blade_height := _rng.randf_range(0.6, 0.92) if tall else _rng.randf_range(0.2, 0.42)
 				var blade_width := _rng.randf_range(0.12, 0.18) if tall else _rng.randf_range(0.11, 0.19)
@@ -249,6 +370,8 @@ func _build_flowers() -> void:
 			var color := palette[_rng.randi() % palette.size()].srgb_to_linear()
 			for i in count:
 				var pos := Vector3(cx + _rng.randf(), _rng.randf_range(0.24, 0.4), cy + _rng.randf())
+				if _shore_at(pos.x, pos.z) > -BEACH_WIDTH - 0.1:
+					continue  # no flowers on the sand
 				var size := _rng.randf_range(0.8, 1.3)
 				xforms.append(Transform3D(Basis.IDENTITY.scaled(Vector3(size, size, size)), pos))
 				customs.append(Color(color.r, color.g, color.b, _rng.randf()))
@@ -301,19 +424,26 @@ func _build_trees() -> void:
 	blob.height = 2.0
 	blob.radial_segments = 20
 	blob.rings = 10
-	_add_multimesh("MapleCanopies", blob, maple_x, maple_c, _shader_material(CANOPY_SHADER), true)
-	_add_multimesh("GinkgoCanopies", blob, ginkgo_x, ginkgo_c, _shader_material(CANOPY_SHADER, {
-		"color_light": Color(0.98, 0.8, 0.28),
-		"color_mid": Color(0.9, 0.62, 0.14),
-		"color_dark": Color(0.6, 0.38, 0.1),
-	}), true)
+	# Each tree material draws a second, inside-out pass: its pencil outline.
+	var maple := _shader_material(CANOPY_SHADER)
+	maple.next_pass = _shader_material(CANOPY_OUTLINE_SHADER)
+	_add_multimesh("MapleCanopies", blob, maple_x, maple_c, maple, true)
+	var ginkgo := _shader_material(CANOPY_SHADER, {
+		"color_light": Color(1.0, 0.87, 0.4),
+		"color_mid": Color(0.95, 0.7, 0.22),
+		"color_dark": Color(0.78, 0.52, 0.18),
+	})
+	ginkgo.next_pass = _shader_material(CANOPY_OUTLINE_SHADER)
+	_add_multimesh("GinkgoCanopies", blob, ginkgo_x, ginkgo_c, ginkgo, true)
 
 	var trunk := CylinderMesh.new()
 	trunk.top_radius = 0.13
 	trunk.bottom_radius = 0.22
 	trunk.height = TRUNK_HEIGHT
 	trunk.radial_segments = 10
-	_add_multimesh("Trunks", trunk, trunk_x, trunk_c, _shader_material(TRUNK_SHADER), true)
+	var bark := _shader_material(TRUNK_SHADER)
+	bark.next_pass = _shader_material(TRUNK_OUTLINE_SHADER)
+	_add_multimesh("Trunks", trunk, trunk_x, trunk_c, bark, true)
 
 
 func _add_tree(pos: Vector3, size: float, canopy_x: Array[Transform3D], canopy_c: Array[Color],
@@ -349,7 +479,7 @@ func _build_rocks() -> void:
 	boulder.height = 1.0
 	boulder.radial_segments = 9
 	boulder.rings = 5
-	var stone := Toon.material(Color(0.55, 0.56, 0.6), true, 0.03)
+	var stone := Toon.material(Color(0.74, 0.73, 0.76), true, 0.03)
 	var rocks := Node3D.new()
 	rocks.name = "Rocks"
 	add_child(rocks)

@@ -4,10 +4,11 @@ shader_type spatial;
 render_mode world_vertex_coords, diffuse_toon, specular_disabled;
 
 #include "res://shaders/wind.gdshaderinc"
+#include "res://shaders/canopy_shape.gdshaderinc"
 
-uniform vec3 color_light : source_color = vec3(0.93, 0.4, 0.16);
-uniform vec3 color_mid : source_color = vec3(0.76, 0.17, 0.11);
-uniform vec3 color_dark : source_color = vec3(0.42, 0.07, 0.13);
+uniform vec3 color_light : source_color = vec3(0.98, 0.58, 0.3);
+uniform vec3 color_mid : source_color = vec3(0.9, 0.34, 0.2);
+uniform vec3 color_dark : source_color = vec3(0.68, 0.2, 0.2);
 uniform float fluff : hint_range(0.0, 0.6) = 0.22;
 
 varying vec3 v_world;
@@ -15,20 +16,7 @@ varying vec3 v_normal;
 varying float v_tint;
 
 void vertex() {
-	vec3 origin = MODEL_MATRIX[3].xyz;
-
-	// Leafy lumps: push the sphere surface in and out.
-	float lump = fbm(VERTEX.xz * 1.9 + VERTEX.y * 1.3);
-	VERTEX += NORMAL * (lump - 0.45) * fluff * 2.0;
-
-	// Whole crown leans with the gusts...
-	float gust = wind_gust(origin.xz, TIME);
-	float lean = (0.05 + gust * 0.22) * wind_strength;
-	float wobble = sin(TIME * 1.6 + origin.x * 0.7 + origin.z * 0.5);
-	VERTEX.xz += wind_dir() * lean * (1.0 + 0.35 * wobble);
-	// ...and the surface rustles.
-	VERTEX += NORMAL * sin(TIME * 5.5 + dot(VERTEX, vec3(3.1, 2.7, 3.7))) * 0.018 * (0.4 + gust);
-
+	VERTEX = canopy_shape(VERTEX, NORMAL, MODEL_MATRIX[3].xyz, fluff);
 	v_world = VERTEX;
 	v_normal = NORMAL;
 	v_tint = INSTANCE_CUSTOM.x;

@@ -5,11 +5,11 @@ render_mode cull_disabled, world_vertex_coords, specular_disabled;
 
 #include "res://shaders/wind.gdshaderinc"
 
-uniform vec3 base_color : source_color = vec3(0.12, 0.3, 0.1);
-uniform vec3 tip_color : source_color = vec3(0.42, 0.66, 0.2);
-uniform vec3 dry_tip_color : source_color = vec3(0.74, 0.74, 0.32);
-uniform vec3 tall_base_color : source_color = vec3(0.06, 0.21, 0.12);
-uniform vec3 tall_tip_color : source_color = vec3(0.34, 0.6, 0.24);
+uniform vec3 base_color : source_color = vec3(0.36, 0.58, 0.22);
+uniform vec3 tip_color : source_color = vec3(0.58, 0.78, 0.32);
+uniform vec3 dry_tip_color : source_color = vec3(0.84, 0.84, 0.44);
+uniform vec3 tall_base_color : source_color = vec3(0.22, 0.47, 0.24);
+uniform vec3 tall_tip_color : source_color = vec3(0.46, 0.7, 0.32);
 uniform vec3 seed_color : source_color = vec3(0.93, 0.88, 0.64);
 uniform vec3 gust_color : source_color = vec3(0.97, 0.96, 0.72);
 
@@ -45,13 +45,16 @@ void fragment() {
 	float patch = fbm(v_root * 0.11);
 	float dry = smoothstep(0.5, 0.75, patch + (v_rand - 0.5) * 0.25);
 
+	// Interpolation can push the height a hair below zero at a blade's edge,
+	// and pow() of a negative number is undefined: it showed up as black dots.
+	float h = clamp(v_height, 0.0, 1.0);
 	vec3 base = mix(base_color, tall_base_color, v_tall);
 	vec3 tip = mix(mix(tip_color, dry_tip_color, dry), tall_tip_color, v_tall);
-	vec3 col = mix(base, tip, pow(v_height, 1.3));
+	vec3 col = mix(base, tip, pow(h, 1.3));
 	// Pale seed heads make tall grass readable as its own kind of tile.
-	col = mix(col, seed_color, smoothstep(0.8, 1.0, v_height) * v_tall * 0.85);
+	col = mix(col, seed_color, smoothstep(0.8, 1.0, h) * v_tall * 0.85);
 	// Gusts flash the tips: the bright bands that roll across the field.
-	col = mix(col, gust_color, v_gust * v_height * v_height * 0.5);
+	col = mix(col, gust_color, v_gust * h * h * 0.5);
 	col *= 0.9 + v_rand * 0.2;
 
 	ALBEDO = col;
