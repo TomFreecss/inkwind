@@ -1,0 +1,88 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/world.gd" id="2_world"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="3_player"]
+[ext_resource type="Script" path="res://scripts/companion.gd" id="4_companion"]
+[ext_resource type="Script" path="res://scripts/camera_rig.gd" id="5_camera"]
+[ext_resource type="Shader" path="res://shaders/painterly_post.gdshader" id="6_post"]
+[ext_resource type="Script" path="res://scripts/battle.gd" id="7_battle"]
+
+[sub_resource type="Environment" id="Environment_meadow"]
+background_mode = 1
+background_color = Color(0.8, 0.87, 0.88, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.56, 0.63, 0.82, 1)
+ambient_light_energy = 0.7
+tonemap_mode = 2
+ssao_enabled = true
+fog_enabled = true
+fog_light_color = Color(0.83, 0.88, 0.86, 1)
+fog_density = 0.002
+adjustment_enabled = true
+adjustment_contrast = 1.1
+adjustment_saturation = 1.2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_painterly"]
+shader = ExtResource("6_post")
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_meadow")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.6428, 0.4924, -0.5868, 0, 0.766, 0.6428, 0.766, 0.4132, -0.4924, 0, 12, 0)
+light_color = Color(1, 0.94, 0.82, 1)
+light_energy = 1.5
+shadow_enabled = true
+directional_shadow_max_distance = 42.0
+
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("2_world")
+
+[node name="Player" type="Node3D" parent="."]
+script = ExtResource("3_player")
+world_path = NodePath("../World")
+
+[node name="Companion" type="Node3D" parent="."]
+script = ExtResource("4_companion")
+player_path = NodePath("../Player")
+world_path = NodePath("../World")
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("5_camera")
+target_path = NodePath("../Player")
+world_path = NodePath("../World")
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+fov = 32.0
+far = 200.0
+
+[node name="PostProcess" type="CanvasLayer" parent="."]
+
+[node name="Painterly" type="ColorRect" parent="PostProcess"]
+material = SubResource("ShaderMaterial_painterly")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Hud" type="CanvasLayer" parent="."]
+layer = 2
+
+[node name="Help" type="Label" parent="Hud"]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Battle" type="Node3D" parent="."]
+script = ExtResource("7_battle")
+player_path = NodePath("../Player")
+companion_path = NodePath("../Companion")
+world_path = NodePath("../World")
+camera_path = NodePath("../CameraRig")
+hud_path = NodePath("../Hud")

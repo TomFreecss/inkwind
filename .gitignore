@@ -1,0 +1,4 @@
+# Godot 4 cache and local editor state
+.godot/
+/android/
+*.tmp

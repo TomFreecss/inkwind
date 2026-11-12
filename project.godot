@@ -1,0 +1,53 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Inkwind"
+config/description="Prototipo: prato pittorico con erba al vento e movimento a griglia."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+environment/defaults/default_clear_color=Color(0.8, 0.87, 0.88, 1)
+
+[shader_globals]
+
+wind_direction={
+"type": "vec2",
+"value": Vector2(0.92, 0.38)
+}
+wind_strength={
+"type": "float",
+"value": 1.0
+}
+player_position={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+clearing_center={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+clearing_radius={
+"type": "float",
+"value": 0.0
+}
